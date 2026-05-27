@@ -1,4 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+// ==========================================
+// CONFIRM MODAL (replaces window.confirm which is blocked on GitHub Pages)
+// ==========================================
+function ConfirmModal({ message, onConfirm, onCancel }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+    }}>
+      <div style={{
+        backgroundColor: '#fff', borderRadius: '12px', padding: '2rem',
+        maxWidth: '420px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        fontFamily: 'var(--font-primary)'
+      }}>
+        <p style={{ fontSize: '1.05rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+          {message}
+        </p>
+        <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{
+            padding: '0.5rem 1.2rem', border: '2px solid #cbd5e1',
+            borderRadius: '8px', cursor: 'pointer', fontWeight: '700',
+            backgroundColor: '#f8fafc', color: '#64748b', fontSize: '0.95rem'
+          }}>취소</button>
+          <button onClick={onConfirm} style={{
+            padding: '0.5rem 1.2rem', border: 'none',
+            borderRadius: '8px', cursor: 'pointer', fontWeight: '700',
+            backgroundColor: '#dc2626', color: '#fff', fontSize: '0.95rem'
+          }}>확인</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? `${import.meta.env.VITE_API_BASE_URL}/api/v1`
@@ -46,6 +80,15 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState('LOGIN'); // LOGIN, LEADER, ADMIN
   const [alert, setAlert] = useState(null);
+  const [confirm, setConfirm] = useState(null); // { message, resolve }
+
+  // useConfirm: replaces window.confirm safely on GitHub Pages
+  const useConfirm = useCallback(() => {
+    return (message) => new Promise((resolve) => {
+      setConfirm({ message, resolve });
+    });
+  }, []);
+  const showConfirm = useConfirm();
 
   useEffect(() => {
     customFetch(`${API_BASE}/auth/me`)
@@ -109,6 +152,13 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {confirm && (
+        <ConfirmModal
+          message={confirm.message}
+          onConfirm={() => { const r = confirm.resolve; setConfirm(null); r(true); }}
+          onCancel={() => { const r = confirm.resolve; setConfirm(null); r(false); }}
+        />
+      )}
       {/* Header */}
       {user && (
         <header className="main-header">
@@ -146,8 +196,8 @@ export default function App() {
       {/* Main Content Area */}
       <main style={{ flex: 1, padding: '2rem' }}>
         {page === 'LOGIN' && <Login setUser={setUser} setPage={setPage} triggerAlert={triggerAlert} />}
-        {page === 'LEADER' && <LeaderPortal user={user} triggerAlert={triggerAlert} />}
-        {page === 'ADMIN' && <AdminDashboard user={user} triggerAlert={triggerAlert} />}
+        {page === 'LEADER' && <LeaderPortal user={user} triggerAlert={triggerAlert} showConfirm={showConfirm} />}
+        {page === 'ADMIN' && <AdminDashboard user={user} triggerAlert={triggerAlert} showConfirm={showConfirm} />}
       </main>
 
       {/* Footer */}
@@ -263,7 +313,7 @@ function Login({ setUser, setPage, triggerAlert }) {
 // ==========================================
 // 2. LEADER PORTAL COMPONENT
 // ==========================================
-function LeaderPortal({ user, triggerAlert }) {
+function LeaderPortal({ user, triggerAlert, showConfirm }) {
   const [schedules, setSchedules] = useState([]);
   const [registrations, setRegistrations] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -614,9 +664,8 @@ function LeaderPortal({ user, triggerAlert }) {
   };
 
   const handleCancelRegistration = async (regId, empName) => {
-    if (!window.confirm(`${empName}님의 예약 신청을 취소하시겠습니까?`)) {
-      return;
-    }
+    const ok = await showConfirm(`${empName}님의 예약 신청을 취소하시겠습니까?`);
+    if (!ok) return;
 
     try {
       const data = await customFetch(`${API_BASE}/registration/${regId}`, {
@@ -1059,7 +1108,7 @@ function LeaderPortal({ user, triggerAlert }) {
 // ==========================================
 // 3. ADMIN DASHBOARD COMPONENT (EXCEL LOOK-AND-FEEL, STATS REMOVED)
 // ==========================================
-function AdminDashboard({ user, triggerAlert }) {
+function AdminDashboard({ user, triggerAlert, showConfirm }) {
   const [activeTab, setActiveTab] = useState('REG'); 
   const [registrations, setRegistrations] = useState([]);
   const [schedules, setSchedules] = useState([]);
@@ -1124,9 +1173,8 @@ function AdminDashboard({ user, triggerAlert }) {
   };
 
   const handleDeleteSchedule = async (dateId, title) => {
-    if (!window.confirm(`[${title}] 교육 일정을 정말 삭제하시겠습니까? 신청된 모든 대상자 정보가 함께 취소됩니다.`)) {
-      return;
-    }
+    const ok = await showConfirm(`[${title}] 교육 일정을 정말 삭제하시겠습니까? 신청된 모든 대상자 정보가 함께 취소됩니다.`);
+    if (!ok) return;
 
     try {
       await customFetch(`${API_BASE}/schedule/${dateId}`, {
@@ -1156,9 +1204,8 @@ function AdminDashboard({ user, triggerAlert }) {
   };
 
   const handleCancelRegistration = async (regId, empName) => {
-    if (!window.confirm(`운영진 권한으로 [${empName}] 사원의 교육 예약을 강제 취소하겠습니까?`)) {
-      return;
-    }
+    const ok = await showConfirm(`운영진 권한으로 [${empName}] 사원의 교육 예약을 강제 취소하겠습니까?`);
+    if (!ok) return;
 
     try {
       await customFetch(`${API_BASE}/registration/${regId}`, {
@@ -1178,6 +1225,13 @@ function AdminDashboard({ user, triggerAlert }) {
       return;
     }
 
+    const escapeCSV = (val) => {
+      const str = String(val ?? '');
+      return str.includes(',') || str.includes('"') || str.includes('\n')
+        ? `"${str.replace(/"/g, '""')}"`
+        : str;
+    };
+
     let csvContent = '\uFEFF';
     csvContent += '차수,이름,사번,연락처,성별,직급,부서,등록리더,등록시간\r\n';
 
@@ -1192,7 +1246,7 @@ function AdminDashboard({ user, triggerAlert }) {
         r.emp_dept,
         r.leader_name || '',
         r.registered_at
-      ].join(',');
+      ].map(escapeCSV).join(',');
       csvContent += row + '\r\n';
     });
 
