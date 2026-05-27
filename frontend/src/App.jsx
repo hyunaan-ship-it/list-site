@@ -348,6 +348,10 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
   const [pendingUpdates, setPendingUpdates] = useState({}); 
   const [savingBulkUpdates, setSavingBulkUpdates] = useState(false);
 
+  // Bulk Selection State
+  const [selectedRegs, setSelectedRegs] = useState(new Set());
+  const [bulkChangeDateId, setBulkChangeDateId] = useState('');
+
   // Real-time Filters for bottom table
   const [filterSession, setFilterSession] = useState('ALL');
   const [filterQuery, setFilterQuery] = useState('');
@@ -723,12 +727,61 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
       const nextPending = { ...pendingUpdates };
       delete nextPending[regId];
       setPendingUpdates(nextPending);
+      
+      const nextSelected = new Set(selectedRegs);
+      nextSelected.delete(regId);
+      setSelectedRegs(nextSelected);
 
       triggerAlert('success', data.message);
       fetchData();
     } catch (error) {
       triggerAlert('danger', error.message);
     }
+  };
+
+  const handleBulkCancelSelected = async () => {
+    if (selectedRegs.size === 0) return;
+    const ok = await showConfirm(`선택하신 ${selectedRegs.size}명의 교육 신청을 일괄 취소하시겠습니까?`);
+    if (!ok) return;
+
+    try {
+      const data = await customFetch(`${API_BASE}/registration/bulk-delete`, {
+        method: 'POST',
+        body: { reg_ids: Array.from(selectedRegs) }
+      });
+
+      triggerAlert('success', data.message);
+      setSelectedRegs(new Set());
+      
+      // Remove from pendingUpdates if they were there
+      const nextPending = { ...pendingUpdates };
+      Array.from(selectedRegs).forEach(id => delete nextPending[id]);
+      setPendingUpdates(nextPending);
+
+      fetchData();
+    } catch (error) {
+      triggerAlert('danger', error.message);
+    }
+  };
+
+  const handleBulkChangeSelected = () => {
+    if (selectedRegs.size === 0) {
+       triggerAlert('danger', '변경할 대상을 먼저 체크박스로 선택해주세요.');
+       return;
+    }
+    if (!bulkChangeDateId) {
+       triggerAlert('danger', '변경할 차수를 선택해주세요.');
+       return;
+    }
+    
+    const nextPending = { ...pendingUpdates };
+    selectedRegs.forEach(regId => {
+      nextPending[regId] = Number(bulkChangeDateId);
+    });
+    setPendingUpdates(nextPending);
+    setSelectedRegs(new Set());
+    setBulkChangeDateId('');
+    triggerAlert('success', `선택하신 ${selectedRegs.size}건의 차수가 변경되었습니다. 우측 상단의 [변경사항 일괄 저장]을 클릭하여 완료해주세요.`);
   };
 
   if (loadingData) {
@@ -1084,6 +1137,44 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
               />
             </div>
             
+            {/* Bulk Selection Actions */}
+            <div className="filters-container-compact" style={{ marginTop: '0.5rem', backgroundColor: '#eef2ff', border: '1px solid #c7d2fe' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#4338ca' }}>
+                ☑️ 선택된 인원 ({selectedRegs.size}명) 일괄 처리:
+              </span>
+              <button 
+                className="huge-btn-danger"
+                style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', borderRadius: '5px', border: 'none', cursor: 'pointer', color: 'white' }}
+                onClick={handleBulkCancelSelected}
+                disabled={selectedRegs.size === 0}
+              >
+                선택 일괄 취소
+              </button>
+
+              <span style={{ margin: '0 0.5rem', color: '#94a3b8' }}>|</span>
+
+              <select
+                className="filter-select-compact"
+                value={bulkChangeDateId}
+                onChange={e => setBulkChangeDateId(e.target.value)}
+              >
+                <option value="">변경할 차수 선택...</option>
+                {schedules.map(sch => (
+                  <option key={sch.date_id} value={sch.date_id}>
+                    {getDynamicTitle(sch, schedules)}
+                  </option>
+                ))}
+              </select>
+              <button 
+                className="btn-save-compact"
+                style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                onClick={handleBulkChangeSelected}
+                disabled={selectedRegs.size === 0}
+              >
+                선택 인원 차수 일괄 변경 적용
+              </button>
+            </div>
+            
             {/* List Table */}
             <div className="table-container-compact">
               {filteredRegs.length === 0 ? (
@@ -1094,6 +1185,19 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
                 <table className="custom-table">
                   <thead>
                     <tr>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input 
+                          type="checkbox"
+                          checked={filteredRegs.length > 0 && selectedRegs.size === filteredRegs.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedRegs(new Set(filteredRegs.map(r => r.reg_id)));
+                            } else {
+                              setSelectedRegs(new Set());
+                            }
+                          }}
+                        />
+                      </th>
                       <th className="col-session">차수 (수정 시 우측 일괄저장 클릭)</th>
                       <th className="col-name">성명</th>
                       <th className="col-empid">사번</th>
@@ -1112,6 +1216,18 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
                       
                       return (
                         <tr key={reg.reg_id}>
+                          <td style={{ textAlign: 'center' }}>
+                            <input 
+                              type="checkbox"
+                              checked={selectedRegs.has(reg.reg_id)}
+                              onChange={(e) => {
+                                const next = new Set(selectedRegs);
+                                if (e.target.checked) next.add(reg.reg_id);
+                                else next.delete(reg.reg_id);
+                                setSelectedRegs(next);
+                              }}
+                            />
+                          </td>
                           <td>
                             <select 
                               style={{
