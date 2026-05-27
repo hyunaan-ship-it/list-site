@@ -355,10 +355,13 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
   const DEFAULT_ROW_COUNT = 15;
   const isAdmin = user.role === 'ADMIN';
 
-  // Dynamic schedule title formatter based on chronological date sorted order
+  // Dynamic schedule title formatter based on chronological date sorted order within region
   const getDynamicTitle = (sch, allSchedules) => {
     if (!sch) return '';
-    const sorted = [...allSchedules].sort((a, b) => a.training_date.localeCompare(b.training_date));
+    const region = sch.region || '수도권';
+    const sorted = [...allSchedules]
+      .filter(s => (s.region || '수도권') === region)
+      .sort((a, b) => a.training_date.localeCompare(b.training_date));
     const idx = sorted.findIndex(s => s.date_id === sch.date_id);
     const mmdd = sch.training_date.split('-').slice(1).join('.');
     return `${idx !== -1 ? idx + 1 : 1}차수 (${mmdd})`;
@@ -1206,10 +1209,13 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
   // Multi-select bulk delete for schedules
   const [selectedSchedules, setSelectedSchedules] = useState(new Set());
 
-  // Dynamic schedule title formatter based on chronological date sorted order
+  // Dynamic schedule title formatter based on chronological date sorted order within region
   const getDynamicTitle = (sch, allSchedules) => {
     if (!sch) return '';
-    const sorted = [...allSchedules].sort((a, b) => a.training_date.localeCompare(b.training_date));
+    const region = sch.region || '수도권';
+    const sorted = [...allSchedules]
+      .filter(s => (s.region || '수도권') === region)
+      .sort((a, b) => a.training_date.localeCompare(b.training_date));
     const idx = sorted.findIndex(s => s.date_id === sch.date_id);
     const mmdd = sch.training_date.split('-').slice(1).join('.');
     return `${idx !== -1 ? idx + 1 : 1}차수 (${mmdd})`;
@@ -1364,8 +1370,10 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
     csvContent += '차수,이름,사번,연락처,성별,직급,부서,등록리더,등록시간\r\n';
 
     registrations.forEach(r => {
+      const sch = schedules.find(s => s.date_id === r.date_id);
+      const displayTitle = sch ? getDynamicTitle(sch, schedules) : r.training_title;
       const row = [
-        r.training_title,
+        displayTitle,
         r.emp_name,
         r.emp_id,
         r.emp_phone || '',
@@ -1391,10 +1399,12 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
   const filteredRegs = registrations.filter(r => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
+    const sch = schedules.find(s => s.date_id === r.date_id);
+    const displayTitle = (sch ? getDynamicTitle(sch, schedules) : r.training_title).toLowerCase();
     return (
       r.emp_name.toLowerCase().includes(q) ||
       r.emp_id.includes(q) ||
-      r.training_title.toLowerCase().includes(q) ||
+      displayTitle.includes(q) ||
       (r.leader_name && r.leader_name.toLowerCase().includes(q))
     );
   });
@@ -1469,7 +1479,12 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
                   <tbody>
                     {filteredRegs.map(r => (
                       <tr key={r.reg_id}>
-                        <td style={{ color: 'var(--color-primary)', fontWeight: '800' }}>{r.training_title}</td>
+                        <td style={{ color: 'var(--color-primary)', fontWeight: '800' }}>
+                          {(() => {
+                            const sch = schedules.find(s => s.date_id === r.date_id);
+                            return sch ? getDynamicTitle(sch, schedules) : r.training_title;
+                          })()}
+                        </td>
                         <td style={{ color: 'var(--text-main)', fontWeight: '700' }}>{r.emp_name}</td>
                         <td><strong>{r.emp_id}</strong></td>
                         <td style={{ letterSpacing: '0.02em' }}>{r.emp_phone || '-'}</td>
