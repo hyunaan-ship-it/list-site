@@ -69,6 +69,11 @@ const customFetch = async (url, options = {}) => {
     data = {};
   }
 
+  if (res.status === 401) {
+    // Session is invalid/expired - dispatch event to seamlessly redirect back to login page
+    window.dispatchEvent(new CustomEvent('unauthorized-api'));
+  }
+
   if (!res.ok) {
     throw new Error(data.error || `서버 요청 실패 (상태 코드: ${res.status})`);
   }
@@ -90,6 +95,14 @@ export default function App() {
   }, []);
   const showConfirm = useConfirm();
 
+  const triggerAlert = (type, message) => {
+    setAlert({ type, message });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => {
+      setAlert(null);
+    }, 8000);
+  };
+
   useEffect(() => {
     customFetch(`${API_BASE}/auth/me`)
       .then(data => {
@@ -105,13 +118,16 @@ export default function App() {
       });
   }, []);
 
-  const triggerAlert = (type, message) => {
-    setAlert({ type, message });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setTimeout(() => {
-      setAlert(null);
-    }, 8000);
-  };
+  // Set up global unauthorized session event listener
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUser(null);
+      setPage('LOGIN');
+      triggerAlert('danger', '세션이 만료되거나 로그아웃되어 자동으로 안전하게 로그인 페이지로 이동합니다. 다시 로그인해주세요.');
+    };
+    window.addEventListener('unauthorized-api', handleUnauthorized);
+    return () => window.removeEventListener('unauthorized-api', handleUnauthorized);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -1183,7 +1199,6 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
 
   // Add Session Form
   const [newDate, setNewDate] = useState('');
-  const [newTitle, setNewTitle] = useState('');
   const [newCapacity, setNewCapacity] = useState('60');
   const [newRegion, setNewRegion] = useState('수도권'); // region state
   const [creatingSched, setCreatingSched] = useState(false);
@@ -1226,8 +1241,8 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
 
   const handleCreateSchedule = async (e) => {
     e.preventDefault();
-    if (!newDate || !newTitle) {
-      triggerAlert('danger', '일정 날짜와 차수 정보를 입력하세요.');
+    if (!newDate) {
+      triggerAlert('danger', '일정 날짜를 입력하세요.');
       return;
     }
 
@@ -1243,7 +1258,7 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
         method: 'POST',
         body: {
           training_date: formattedDate,
-          title: newTitle,
+          title: '', // Backend will auto-generate title (MM.DD)
           max_capacity: parseInt(newCapacity) || 60,
           region: newRegion
         }
@@ -1251,7 +1266,6 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
 
       triggerAlert('success', '새로운 교육 차수 일정이 생성되었습니다.');
       setNewDate('');
-      setNewTitle('');
       setNewCapacity('60');
       setNewRegion('수도권');
       fetchData();
@@ -1496,7 +1510,7 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
                 ➕ 신규 교육 차수 추가
               </h3>
               
-              <form onSubmit={handleCreateSchedule} style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1fr 1fr', gap: '1rem', alignItems: 'end' }}>
+              <form onSubmit={handleCreateSchedule} style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '1rem', alignItems: 'end' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   <label style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>차수 교육 날짜</label>
                   <input
@@ -1506,18 +1520,6 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
                     placeholder="2026-11-09 또는 20261109"
                     value={newDate}
                     onChange={e => setNewDate(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                  <label style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>차수 명칭 (예: (11.04) 형식 추천)</label>
-                  <input
-                    className="filter-input-compact"
-                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.95rem' }}
-                    type="text"
-                    placeholder="예: 6차수 (12.09)"
-                    value={newTitle}
-                    onChange={e => setNewTitle(e.target.value)}
                   />
                 </div>
 

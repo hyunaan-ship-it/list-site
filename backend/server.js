@@ -296,8 +296,8 @@ app.get('/api/v1/schedule', requireAuth, (req, res) => {
 // Create schedule (Admin only)
 app.post('/api/v1/schedule', requireAdmin, (req, res) => {
   const { training_date, title, max_capacity, region } = req.body;
-  if (!training_date || !title) {
-    return res.status(400).json({ error: '날짜와 교육명을 입력해주세요.' });
+  if (!training_date) {
+    return res.status(400).json({ error: '날짜를 입력해주세요.' });
   }
 
   // 8-digit numeric string formatting helper (e.g. 20261109 -> 2026-11-09)
@@ -311,6 +311,17 @@ app.post('/api/v1/schedule', requireAdmin, (req, res) => {
     return res.status(400).json({ error: '올바른 날짜 형식이 아닙니다. (예: 2026-11-09 또는 20261109)' });
   }
 
+  // Auto-generate title if not specified by user
+  let targetTitle = title ? String(title).trim() : '';
+  if (!targetTitle) {
+    const parts = formattedDate.split('-');
+    if (parts.length === 3) {
+      targetTitle = `${parts[1]}.${parts[2]}`;
+    } else {
+      targetTitle = formattedDate;
+    }
+  }
+
   const targetRegion = region ? String(region).trim() : '수도권';
 
   try {
@@ -318,12 +329,12 @@ app.post('/api/v1/schedule', requireAdmin, (req, res) => {
     const result = db.prepare(`
       INSERT INTO training_dates (training_date, title, max_capacity, region)
       VALUES (?, ?, ?, ?)
-    `).run(formattedDate, title, capacity, targetRegion);
+    `).run(formattedDate, targetTitle, capacity, targetRegion);
     
     const newSchedule = {
       date_id: result.lastInsertRowid,
       training_date: formattedDate,
-      title,
+      title: targetTitle,
       max_capacity: capacity,
       region: targetRegion,
       status: 'ACTIVE'
