@@ -52,8 +52,22 @@ try {
 }
 
 // Middleware
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5000',
+  'https://hyunaan-ship-it.github.io',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    // origin이 없으면 같은 서버에서 온 요청 (서버사이드 등)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: ${origin} 허용되지 않은 출처입니다.`));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());

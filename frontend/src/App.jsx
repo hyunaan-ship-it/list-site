@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 
-const API_BASE = window.location.origin.includes(':5173') 
-  ? 'http://localhost:5000/api/v1' 
-  : '/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL
+  ? `${import.meta.env.VITE_API_BASE_URL}/api/v1`
+  : window.location.origin.includes(':5173')
+    ? 'http://localhost:5000/api/v1'
+    : '/api/v1';
 
 // Custom robust fetch helper to support credentials: 'include' for secure session cookies
 const customFetch = async (url, options = {}) => {

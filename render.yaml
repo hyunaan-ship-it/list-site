@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: student-list-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node backend/server.js
+    disk:
+      name: sqlite-data
+      mountPath: /opt/render/project/src/backend
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://hyunaan-ship-it.github.io
