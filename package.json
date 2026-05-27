@@ -1,0 +1,29 @@
+{
+  "name": "company-training-schedule-manager",
+  "version": "1.0.0",
+  "description": "In-house Training Schedule Management Website optimized for senior leaders",
+  "main": "backend/server.js",
+  "scripts": {
+    "init-db": "node backend/init-db.js",
+    "server": "node backend/server.js",
+    "client": "npm run --prefix frontend dev",
+    "client-install": "npm install --prefix frontend",
+    "client-build": "npm run --prefix frontend build",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "start": "node backend/server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "bcryptjs": "^2.4.3",
+    "express-session": "^1.18.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "author": "Antigravity Architect",
+  "license": "ISC"
+}

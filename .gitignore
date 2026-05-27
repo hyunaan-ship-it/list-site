@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/.vite/
+
+# Database files (contain real data)
+backend/*.db
+backend/*.db-journal
+backend/*.db-shm
+backend/*.db-wal
+
+# Excel / sensitive data files
+*.xlsx
+*.xls
+*.csv
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Scratch / temp
+scratch/
