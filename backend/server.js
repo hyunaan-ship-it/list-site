@@ -15,6 +15,8 @@ const db = new Database(DB_PATH);
 // Defensive Admin Auto-Repair Block
 try {
   const adminEmpId = 'admin';
+  const ADMIN_DEFAULT_PASSWORD = '1234';
+
   const adminEmpExists = db.prepare('SELECT COUNT(*) as count FROM employees WHERE emp_id = ?').get(adminEmpId).count;
   if (adminEmpExists === 0) {
     db.prepare(`
@@ -23,15 +25,27 @@ try {
     `).run(adminEmpId, '관리자', '남', '운영진', 'HR팀', 'admin@company.com', '010-0000-0000');
     console.log('Auto-repaired: admin employee record created.');
   }
-  const adminUserExists = db.prepare('SELECT COUNT(*) as count FROM users WHERE emp_id = ?').get(adminEmpId).count;
-  if (adminUserExists === 0) {
+
+  const adminUser = db.prepare('SELECT * FROM users WHERE emp_id = ?').get(adminEmpId);
+  if (!adminUser) {
     const salt = bcrypt.genSaltSync(10);
-    const passwordHash = bcrypt.hashSync('admin123', salt);
+    const passwordHash = bcrypt.hashSync(ADMIN_DEFAULT_PASSWORD, salt);
     db.prepare(`
       INSERT INTO users (emp_id, password_hash, role)
       VALUES (?, ?, ?)
     `).run(adminEmpId, passwordHash, 'ADMIN');
-    console.log('Auto-repaired: admin user record created (Password: admin123).');
+    console.log(`Auto-repaired: admin user record created (Password: ${ADMIN_DEFAULT_PASSWORD}).`);
+  } else {
+    // 기존 admin 비밀번호가 '1234'와 일치하지 않으면 재설정
+    const isMatch = bcrypt.compareSync(ADMIN_DEFAULT_PASSWORD, adminUser.password_hash);
+    if (!isMatch) {
+      const salt = bcrypt.genSaltSync(10);
+      const passwordHash = bcrypt.hashSync(ADMIN_DEFAULT_PASSWORD, salt);
+      db.prepare('UPDATE users SET password_hash = ? WHERE emp_id = ?').run(passwordHash, adminEmpId);
+      console.log(`Auto-repaired: admin password reset to '${ADMIN_DEFAULT_PASSWORD}'.`);
+    } else {
+      console.log('Admin account OK.');
+    }
   }
 } catch (e) {
   console.error('Admin auto-repair error:', e);
