@@ -79,13 +79,13 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 24 * 60 * 60 * 1000 // 1 day
   }
 }));
 
-// Serve static files from the React frontend build folder in production
-app.use(express.static(path.join(__dirname, '../frontend/dist')));
+// Note: Frontend is served via GitHub Pages. This server is API-only.
 
 // Helper to format phone number
 function formatPhone(phone) {
@@ -672,9 +672,9 @@ app.delete('/api/v1/registration/:reg_id', requireAuth, (req, res) => {
   }
 });
 
-// Fallback to React app
+// 404 fallback for unknown API routes
 app.use((req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+  res.status(404).json({ error: 'API endpoint not found.' });
 });
 
 // Start Server
