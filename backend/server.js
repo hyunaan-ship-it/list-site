@@ -27,7 +27,7 @@ try {
 // Defensive Admin Auto-Repair Block
 try {
   const adminEmpId = 'admin';
-  const ADMIN_DEFAULT_PASSWORD = '1234';
+  const ADMIN_DEFAULT_PASSWORD = 'lgadmin';
 
   const adminEmpExists = db.prepare('SELECT COUNT(*) as count FROM employees WHERE emp_id = ?').get(adminEmpId).count;
   if (adminEmpExists === 0) {
@@ -48,7 +48,7 @@ try {
     `).run(adminEmpId, passwordHash, 'ADMIN');
     console.log(`Auto-repaired: admin user record created (Password: ${ADMIN_DEFAULT_PASSWORD}).`);
   } else {
-    // 기존 admin 비밀번호가 '1234'와 일치하지 않으면 재설정
+    // 기존 admin 비밀번호가 'lgadmin'와 일치하지 않으면 재설정
     const isMatch = bcrypt.compareSync(ADMIN_DEFAULT_PASSWORD, adminUser.password_hash);
     if (!isMatch) {
       const salt = bcrypt.genSaltSync(10);
@@ -86,7 +86,63 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Session management
+// Custom SQLite session store using better-sqlite3
+const Store = session.Store;
+class SQLiteStore extends Store {
+  constructor(dbConnection) {
+    super();
+    this.db = dbConnection;
+    // Create sessions table if not exists
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        sid TEXT PRIMARY KEY,
+        sess TEXT NOT NULL,
+        expired DATETIME NOT NULL
+      )
+    `);
+    // Periodically clean up expired sessions (every hour)
+    setInterval(() => {
+      try {
+        this.db.prepare('DELETE FROM sessions WHERE expired < CURRENT_TIMESTAMP').run();
+      } catch (err) {
+        console.error('Session DB cleanup error:', err);
+      }
+    }, 60 * 60 * 1000).unref();
+  }
+
+  get(sid, cb) {
+    try {
+      const row = this.db.prepare('SELECT sess FROM sessions WHERE sid = ? AND expired > CURRENT_TIMESTAMP').get(sid);
+      if (!row) return cb(null, null);
+      cb(null, JSON.parse(row.sess));
+    } catch (err) {
+      cb(err);
+    }
+  }
+
+  set(sid, sess, cb) {
+    try {
+      const maxAge = sess.cookie.maxAge || 24 * 60 * 60 * 1000;
+      const expired = new Date(Date.now() + maxAge).toISOString();
+      this.db.prepare('INSERT OR REPLACE INTO sessions (sid, sess, expired) VALUES (?, ?, ?)').run(sid, JSON.stringify(sess), expired);
+      cb(null);
+    } catch (err) {
+      cb(err);
+    }
+  }
+
+  destroy(sid, cb) {
+    try {
+      this.db.prepare('DELETE FROM sessions WHERE sid = ?').run(sid);
+      if (cb) cb(null);
+    } catch (err) {
+      if (cb) cb(err);
+    }
+  }
+}
+
 app.use(session({
+  store: new SQLiteStore(db),
   secret: 'company-training-secret-key-123',
   resave: false,
   saveUninitialized: false,
@@ -146,15 +202,17 @@ app.post('/api/v1/auth/login', (req, res) => {
 
     let user = db.prepare('SELECT * FROM users WHERE emp_id = ?').get(trimmedEmpId);
 
-    // Dynamic sign-up for existing employees with default password '1234'
+    // Dynamic sign-up for existing employees with default password 'lg[사번]' (with legacy '1234' & 'lg[사번]!' fallbacks)
     if (!user) {
-      if (password === '1234') {
+      const defaultPassword = `lg${trimmedEmpId}`;
+      const legacyPasswordWithExclamation = `lg${trimmedEmpId}!`;
+      if (password === defaultPassword || password === legacyPasswordWithExclamation || password === '1234') {
         const salt = bcrypt.genSaltSync(10);
-        const hash = bcrypt.hashSync('1234', salt);
+        const hash = bcrypt.hashSync(password, salt);
         db.prepare('INSERT INTO users (emp_id, password_hash, role) VALUES (?, ?, ?)').run(trimmedEmpId, hash, 'LEADER');
         user = db.prepare('SELECT * FROM users WHERE emp_id = ?').get(trimmedEmpId);
       } else {
-        return res.status(401).json({ error: '초기 비밀번호는 1234입니다. 비밀번호를 다시 확인해주세요.' });
+        return res.status(401).json({ error: `초기 비밀번호는 lg[사번] 형식입니다. (예: lg${trimmedEmpId})` });
       }
     } else {
       const isMatch = bcrypt.compareSync(password, user.password_hash);

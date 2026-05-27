@@ -282,7 +282,7 @@ function Login({ setUser, setPage, triggerAlert }) {
       </div>
 
       <div className="alert-banner alert-info" style={{ marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-        📢 <strong>안내 :</strong> 초기 비밀번호는 <strong>1234</strong>입니다.
+        📢 <strong>안내 :</strong> 초기 비밀번호는 <strong>lg[본인사번]</strong>입니다. (예: 사번이 123456이면 lg123456)
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -306,7 +306,7 @@ function Login({ setUser, setPage, triggerAlert }) {
             id="password"
             className="huge-input"
             type="password"
-            placeholder="초기비밀번호: 1234"
+            placeholder="초기비밀번호: lg[사번]"
             value={password}
             onChange={e => setPassword(e.target.value)}
             disabled={submitting}
