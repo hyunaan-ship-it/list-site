@@ -8,6 +8,10 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Render (and most cloud platforms) run behind a reverse proxy.
+// This is required for secure session cookies to work over HTTPS.
+app.set('trust proxy', 1);
+
 // Connect to Database
 const DB_PATH = path.join(__dirname, 'db.sqlite');
 const db = new Database(DB_PATH);
