@@ -16,6 +16,14 @@ app.set('trust proxy', 1);
 const DB_PATH = path.join(__dirname, 'db.sqlite');
 const db = new Database(DB_PATH);
 
+// Database Migration: Add 'region' column if not exists
+try {
+  db.exec("ALTER TABLE training_dates ADD COLUMN region TEXT DEFAULT '수도권'");
+  console.log("Database Migration Success: Added 'region' column to training_dates");
+} catch (e) {
+  // Column already exists, safe to ignore
+}
+
 // Defensive Admin Auto-Repair Block
 try {
   const adminEmpId = 'admin';
@@ -287,23 +295,37 @@ app.get('/api/v1/schedule', requireAuth, (req, res) => {
 
 // Create schedule (Admin only)
 app.post('/api/v1/schedule', requireAdmin, (req, res) => {
-  const { training_date, title, max_capacity } = req.body;
+  const { training_date, title, max_capacity, region } = req.body;
   if (!training_date || !title) {
     return res.status(400).json({ error: '날짜와 교육명을 입력해주세요.' });
   }
 
+  // 8-digit numeric string formatting helper (e.g. 20261109 -> 2026-11-09)
+  let formattedDate = String(training_date).trim();
+  if (/^\d{8}$/.test(formattedDate)) {
+    formattedDate = formattedDate.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
+  }
+
+  // Date format pattern verification (must be YYYY-MM-DD or similar)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(formattedDate)) {
+    return res.status(400).json({ error: '올바른 날짜 형식이 아닙니다. (예: 2026-11-09 또는 20261109)' });
+  }
+
+  const targetRegion = region ? String(region).trim() : '수도권';
+
   try {
     const capacity = parseInt(max_capacity) || 60; // Strict default 60 capacity
     const result = db.prepare(`
-      INSERT INTO training_dates (training_date, title, max_capacity)
-      VALUES (?, ?, ?)
-    `).run(training_date, title, capacity);
+      INSERT INTO training_dates (training_date, title, max_capacity, region)
+      VALUES (?, ?, ?, ?)
+    `).run(formattedDate, title, capacity, targetRegion);
     
     const newSchedule = {
       date_id: result.lastInsertRowid,
-      training_date,
+      training_date: formattedDate,
       title,
       max_capacity: capacity,
+      region: targetRegion,
       status: 'ACTIVE'
     };
     res.status(201).json(newSchedule);
@@ -316,19 +338,36 @@ app.post('/api/v1/schedule', requireAdmin, (req, res) => {
   }
 });
 
+// Bulk Delete schedules (Admin only)
+app.post('/api/v1/schedule/bulk-delete', requireAdmin, (req, res) => {
+  const { date_ids } = req.body;
+  if (!date_ids || !Array.isArray(date_ids) || date_ids.length === 0) {
+    return res.status(400).json({ error: '삭제할 차수 ID 목록이 비어있습니다.' });
+  }
+  try {
+    const placeholders = date_ids.map(() => '?').join(',');
+    db.prepare(`DELETE FROM training_dates WHERE date_id IN (${placeholders})`).run(date_ids);
+    res.json({ message: `${date_ids.length}개의 교육 차수가 성공적으로 삭제되었습니다.` });
+  } catch (error) {
+    console.error('Bulk schedule delete error:', error);
+    res.status(500).json({ error: '서버 삭제 처리 중 오류가 발생했습니다.' });
+  }
+});
+
 // Update schedule status/info (Admin only)
 app.put('/api/v1/schedule/:date_id', requireAdmin, (req, res) => {
   const { date_id } = req.params;
-  const { title, max_capacity, status } = req.body;
+  const { title, max_capacity, status, region } = req.body;
 
   try {
     db.prepare(`
       UPDATE training_dates 
       SET title = COALESCE(?, title),
           max_capacity = COALESCE(?, max_capacity),
-          status = COALESCE(?, status)
+          status = COALESCE(?, status),
+          region = COALESCE(?, region)
       WHERE date_id = ?
-    `).run(title, max_capacity, status, date_id);
+    `).run(title, max_capacity, status, region, date_id);
     
     res.json({ message: '교육 일정이 수정되었습니다.' });
   } catch (error) {
@@ -378,7 +417,8 @@ app.get('/api/v1/registration', requireAuth, (req, res) => {
         FROM registrations r
         JOIN training_dates t ON r.date_id = t.date_id
         JOIN employees e ON r.emp_id = e.emp_id
-        WHERE r.leader_emp_id = ?
+        JOIN employees l ON l.emp_id = ?
+        WHERE r.leader_emp_id = l.emp_id OR e.department = l.department
         ORDER BY t.training_date ASC, r.registered_at ASC
       `).all(user.emp_id);
     }

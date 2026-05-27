@@ -318,7 +318,10 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
   const [registrations, setRegistrations] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  // Active Session Selection
+  // Region Tab State (1차 트리 선택)
+  const [selectedRegion, setSelectedRegion] = useState('수도권');
+
+  // Active Session Selection (2차 일정 선택)
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   
   // Spreadsheet Grid State
@@ -336,6 +339,15 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
   const DEFAULT_ROW_COUNT = 15;
   const isAdmin = user.role === 'ADMIN';
 
+  // Dynamic schedule title formatter based on chronological date sorted order
+  const getDynamicTitle = (sch, allSchedules) => {
+    if (!sch) return '';
+    const sorted = [...allSchedules].sort((a, b) => a.training_date.localeCompare(b.training_date));
+    const idx = sorted.findIndex(s => s.date_id === sch.date_id);
+    const mmdd = sch.training_date.split('-').slice(1).join('.');
+    return `${idx !== -1 ? idx + 1 : 1}차수 (${mmdd})`;
+  };
+
   const fetchData = async () => {
     try {
       const [schedData, regData] = await Promise.all([
@@ -343,14 +355,19 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
         customFetch(`${API_BASE}/registration`)
       ]);
 
-      setSchedules(schedData);
+      // Always ensure chronologically sorted order
+      const sortedSchedules = [...schedData].sort((a, b) => a.training_date.localeCompare(b.training_date));
+
+      setSchedules(sortedSchedules);
       setRegistrations(regData);
 
-      // Select first active session by default if none selected
-      if (schedData.length > 0 && !selectedSchedule) {
-        setSelectedSchedule(schedData[0]);
+      // Filtered by current region for initial selection
+      const regionSchedules = sortedSchedules.filter(s => (s.region || '수도권') === selectedRegion);
+
+      if (regionSchedules.length > 0 && !selectedSchedule) {
+        setSelectedSchedule(regionSchedules[0]);
       } else if (selectedSchedule) {
-        const updated = schedData.find(s => s.date_id === selectedSchedule.date_id);
+        const updated = sortedSchedules.find(s => s.date_id === selectedSchedule.date_id);
         if (updated) setSelectedSchedule(updated);
       }
     } catch (error) {
@@ -360,6 +377,18 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
       setLoadingData(false);
     }
   };
+
+  // Trigger when selectedRegion changes to auto-select the first schedule in that region
+  useEffect(() => {
+    if (schedules.length > 0) {
+      const regionSchedules = schedules.filter(s => (s.region || '수도권') === selectedRegion);
+      if (regionSchedules.length > 0) {
+        setSelectedSchedule(regionSchedules[0]);
+      } else {
+        setSelectedSchedule(null);
+      }
+    }
+  }, [selectedRegion, schedules]);
 
   useEffect(() => {
     fetchData();
@@ -729,45 +758,80 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
         {/* Left Column: Vertical stack of schedules with global counts */}
         <aside className="portal-left-sidebar">
           <div className="sidebar-title">
-            <span>📅</span> 교육 차수 선택
+            <span>📅</span> 지역 & 교육 차수 선택
           </div>
-          <div className="sidebar-session-list">
-            {schedules.map(sch => {
-              const count = sch.current_count || 0; 
-              const limit = sch.max_capacity || 60;
-              const full = count >= limit;
-              const isSelected = selectedSchedule?.date_id === sch.date_id;
-              
-              return (
-                <button
-                  key={sch.date_id}
-                  className={`sidebar-session-item ${isSelected ? 'selected' : ''}`}
-                  onClick={() => setSelectedSchedule(sch)}
-                >
-                  <span style={{ fontSize: '1.05rem', fontWeight: '800', color: isSelected ? 'var(--color-primary-light)' : 'var(--text-main)' }}>
-                    {sch.title}
-                  </span>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    일자: {sch.training_date}
-                  </span>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
-                    <span style={{
-                      padding: '0.1rem 0.4rem',
-                      borderRadius: '8px',
-                      fontSize: '0.75rem',
-                      fontWeight: '700',
-                      backgroundColor: full ? '#fee2e2' : '#dcfce7',
-                      color: full ? 'var(--color-danger)' : 'var(--color-success)'
-                    }}>
-                      {full ? '마감 (제한초과)' : '접수중'}
+          
+          {/* 1차 트리: 지역 선택 탭 */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', padding: '0.5rem', backgroundColor: '#f1f5f9', borderBottom: '1px solid var(--border-color)' }}>
+            {['수도권', '중부&강원실', '서부&충청실', '남부'].map(r => (
+              <button
+                key={r}
+                onClick={() => setSelectedRegion(r)}
+                style={{
+                  flex: 1,
+                  padding: '0.4rem 0.2rem',
+                  fontSize: '0.8rem',
+                  fontWeight: '800',
+                  borderRadius: '6px',
+                  border: selectedRegion === r ? '2px solid var(--color-primary)' : '1px solid #cbd5e1',
+                  backgroundColor: selectedRegion === r ? 'var(--color-primary)' : '#ffffff',
+                  color: selectedRegion === r ? '#ffffff' : '#475569',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+
+          <div className="sidebar-session-list" style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto' }}>
+            {schedules
+              .filter(sch => (sch.region || '수도권') === selectedRegion)
+              .map(sch => {
+                const count = sch.current_count || 0; 
+                const limit = sch.max_capacity || 60;
+                const full = count >= limit;
+                const isSelected = selectedSchedule?.date_id === sch.date_id;
+                const dynamicTitle = getDynamicTitle(sch, schedules);
+                
+                return (
+                  <button
+                    key={sch.date_id}
+                    className={`sidebar-session-item ${isSelected ? 'selected' : ''}`}
+                    onClick={() => setSelectedSchedule(sch)}
+                  >
+                    <span style={{ fontSize: '1.05rem', fontWeight: '800', color: isSelected ? 'var(--color-primary-light)' : 'var(--text-main)' }}>
+                      {dynamicTitle}
                     </span>
-                    <strong style={{ fontSize: '0.95rem', color: full ? 'var(--color-danger)' : 'var(--text-main)' }}>
-                      {count} / {limit}명
-                    </strong>
-                  </div>
-                </button>
-              );
-            })}
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      일자: {sch.training_date}
+                    </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
+                      <span style={{
+                        padding: '0.1rem 0.4rem',
+                        borderRadius: '8px',
+                        fontSize: '0.75rem',
+                        fontWeight: '700',
+                        backgroundColor: full ? '#fee2e2' : '#dcfce7',
+                        color: full ? 'var(--color-danger)' : 'var(--color-success)'
+                      }}>
+                        {full ? '마감 (제한초과)' : '접수중'}
+                      </span>
+                      <strong style={{ fontSize: '0.95rem', color: full ? 'var(--color-danger)' : 'var(--text-main)' }}>
+                        {count} / {limit}명
+                      </strong>
+                    </div>
+                  </button>
+                );
+              })}
+            {schedules.filter(sch => (sch.region || '수도권') === selectedRegion).length === 0 && (
+              <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>
+                본 지역에 개설된 교육 차수가 없습니다.
+              </div>
+            )}
           </div>
         </aside>
 
@@ -780,7 +844,7 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
               <div className="panel-inner-container">
                 <div className="panel-header">
                   <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    📝 [{selectedSchedule.title}] 교육 대상자 등록 표
+                    📝 [{getDynamicTitle(selectedSchedule, schedules)}] 교육 대상자 등록 표
                   </h3>
                   <span style={{ fontSize: '1rem', fontWeight: '700', color: isFull ? 'var(--color-danger)' : 'var(--text-main)' }}>
                     전체 점유 현황: <strong>{currentRegCount}명</strong> / {maxLimit}명 (남은 자리: {maxLimit - currentRegCount}명)
@@ -824,19 +888,21 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
                             let statusLabel = '🕒 미입력';
                             
                             if (row.status === 'VERIFIED') {
-                              statusColor = '#15803d';
+                              statusColor = 'var(--color-success)';
                               statusBg = '#dcfce7';
-                              statusLabel = '✅ 확인완료';
-                            } else if (row.status === 'ERROR') {
-                              statusColor = '#b91c1c';
-                              statusBg = '#fef2f2';
-                              statusLabel = `❌ ${row.errorMsg}`;
+                              statusLabel = '✅ 검증성공';
+                            } else if (row.status === 'INVALID') {
+                              statusColor = 'var(--color-danger)';
+                              statusBg = '#fee2e2';
+                              statusLabel = '❌ 없는사번';
                             } else if (row.status === 'DUPLICATE') {
-                              statusColor = '#d97706';
-                              statusBg = '#fffbeb';
-                              statusLabel = `⚠️ ${row.errorMsg}`;
-                            } else if (row.status === 'PENDING') {
-                              statusLabel = '🔍 조회중...';
+                              statusColor = '#ea580c';
+                              statusBg = '#ffedd5';
+                              statusLabel = `⚠️ ${row.registered_session || '신청됨'}`;
+                            } else if (row.status === 'VALIDATING') {
+                              statusColor = '#2563eb';
+                              statusBg = '#dbeafe';
+                              statusLabel = '🔄 조회중...';
                             }
 
                             return (
@@ -954,12 +1020,12 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
           {/* Bottom Panel: Registered List */}
           <div className="portal-bottom-panel">
             <div className="panel-header-row">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                 <h3 style={{ fontSize: '1.15rem', color: 'var(--text-main)', fontWeight: '800', margin: 0 }}>
-                  📋 내가 신청 완료한 구성원 교육 예약 목록 ({filteredRegs.length}건)
+                  📋 내가 소속된 센터의 구성원 교육 예약 목록 ({filteredRegs.length}건)
                 </h3>
-                <span className="tooltip-badge">
-                  (일괄 변경 후 아래 일괄 저장 클릭)
+                <span style={{ color: 'var(--color-primary-dark)', fontSize: '0.85rem', fontWeight: '700' }}>
+                  ※ 리더님과 동일한 부서 소속인 경우, 다른 리더나 운영진이 변경/등록한 정보도 안전하게 실시간 조회됩니다!
                 </span>
               </div>
               <button
@@ -985,7 +1051,7 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
                 <option value="ALL">전체 차수 조회</option>
                 {schedules.map(sch => (
                   <option key={sch.date_id} value={sch.date_id}>
-                    {sch.title}
+                    {getDynamicTitle(sch, schedules)}
                   </option>
                 ))}
               </select>
@@ -1051,7 +1117,7 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
                             >
                               {schedules.map(sch => (
                                 <option key={sch.date_id} value={sch.date_id}>
-                                  {sch.title}
+                                  {getDynamicTitle(sch, schedules)}
                                 </option>
                               ))}
                             </select>
@@ -1119,7 +1185,20 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
   const [newDate, setNewDate] = useState('');
   const [newTitle, setNewTitle] = useState('');
   const [newCapacity, setNewCapacity] = useState('60');
+  const [newRegion, setNewRegion] = useState('수도권'); // region state
   const [creatingSched, setCreatingSched] = useState(false);
+
+  // Multi-select bulk delete for schedules
+  const [selectedSchedules, setSelectedSchedules] = useState(new Set());
+
+  // Dynamic schedule title formatter based on chronological date sorted order
+  const getDynamicTitle = (sch, allSchedules) => {
+    if (!sch) return '';
+    const sorted = [...allSchedules].sort((a, b) => a.training_date.localeCompare(b.training_date));
+    const idx = sorted.findIndex(s => s.date_id === sch.date_id);
+    const mmdd = sch.training_date.split('-').slice(1).join('.');
+    return `${idx !== -1 ? idx + 1 : 1}차수 (${mmdd})`;
+  };
 
   const fetchData = async () => {
     try {
@@ -1128,8 +1207,11 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
         customFetch(`${API_BASE}/schedule`)
       ]);
 
+      // Sort schedules chronologically
+      const sortedSchedules = [...schedData].sort((a, b) => a.training_date.localeCompare(b.training_date));
+
       setRegistrations(regData);
-      setSchedules(schedData);
+      setSchedules(sortedSchedules);
     } catch (error) {
       console.error('Admin fetch error:', error);
       triggerAlert('danger', error.message || '데이터 로드 실패');
@@ -1149,14 +1231,21 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
       return;
     }
 
+    // Flexible 8-digit date formatting (e.g. 20261109 -> 2026-11-09)
+    let formattedDate = newDate.trim();
+    if (/^\d{8}$/.test(formattedDate)) {
+      formattedDate = formattedDate.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
+    }
+
     setCreatingSched(true);
     try {
       await customFetch(`${API_BASE}/schedule`, {
         method: 'POST',
         body: {
-          training_date: newDate,
+          training_date: formattedDate,
           title: newTitle,
-          max_capacity: parseInt(newCapacity) || 60
+          max_capacity: parseInt(newCapacity) || 60,
+          region: newRegion
         }
       });
 
@@ -1164,6 +1253,7 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
       setNewDate('');
       setNewTitle('');
       setNewCapacity('60');
+      setNewRegion('수도권');
       fetchData();
     } catch (error) {
       triggerAlert('danger', error.message);
@@ -1182,6 +1272,30 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
       });
 
       triggerAlert('success', '교육 일정이 정상 삭제되었습니다.');
+      
+      const updatedSelected = new Set(selectedSchedules);
+      updatedSelected.delete(dateId);
+      setSelectedSchedules(updatedSelected);
+
+      fetchData();
+    } catch (error) {
+      triggerAlert('danger', error.message);
+    }
+  };
+
+  const handleBulkDeleteSchedules = async () => {
+    if (selectedSchedules.size === 0) return;
+    const ok = await showConfirm(`선택하신 ${selectedSchedules.size}개의 교육 차수를 일괄 삭제하시겠습니까? 신청된 모든 대상자 예약 내역도 함께 취소됩니다.`);
+    if (!ok) return;
+
+    try {
+      await customFetch(`${API_BASE}/schedule/bulk-delete`, {
+        method: 'POST',
+        body: { date_ids: Array.from(selectedSchedules) }
+      });
+
+      triggerAlert('success', `${selectedSchedules.size}개의 교육 차수가 정상적으로 일괄 삭제되었습니다.`);
+      setSelectedSchedules(new Set());
       fetchData();
     } catch (error) {
       triggerAlert('danger', error.message);
@@ -1382,20 +1496,21 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
                 ➕ 신규 교육 차수 추가
               </h3>
               
-              <form onSubmit={handleCreateSchedule} style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1fr', gap: '1rem', alignItems: 'end' }}>
+              <form onSubmit={handleCreateSchedule} style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1fr 1fr', gap: '1rem', alignItems: 'end' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   <label style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>차수 교육 날짜</label>
                   <input
                     className="filter-input-compact"
                     style={{ padding: '0.4rem 0.6rem', fontSize: '0.95rem' }}
-                    type="date"
+                    type="text"
+                    placeholder="2026-11-09 또는 20261109"
                     value={newDate}
                     onChange={e => setNewDate(e.target.value)}
                   />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                  <label style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>차수 명칭</label>
+                  <label style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>차수 명칭 (예: (11.04) 형식 추천)</label>
                   <input
                     className="filter-input-compact"
                     style={{ padding: '0.4rem 0.6rem', fontSize: '0.95rem' }}
@@ -1407,11 +1522,26 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>차수 지역 구분</label>
+                  <select
+                    className="filter-select-compact"
+                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.95rem', width: '100%' }}
+                    value={newRegion}
+                    onChange={e => setNewRegion(e.target.value)}
+                  >
+                    <option value="수도권">수도권</option>
+                    <option value="중부&강원실">중부&강원실</option>
+                    <option value="서부&충청실">서부&충청실</option>
+                    <option value="남부">남부</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   <label style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)' }}>차수 정원 제한</label>
                   <div style={{ display: 'flex', gap: '0.6rem' }}>
                     <input
                       className="filter-input-compact"
-                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.95rem', width: '90px' }}
+                      style={{ padding: '0.4rem 0.6rem', fontSize: '0.95rem', width: '80px' }}
                       type="number"
                       min="1"
                       value={newCapacity}
@@ -1427,14 +1557,53 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
 
             {/* List of Sessions */}
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-              <h3 style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '0.5rem', fontWeight: '800' }}>
-                📋 각 차수별 신청 접수 상황 및 정원 제어
-              </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <h3 style={{ fontSize: '1rem', color: 'var(--text-main)', margin: 0, fontWeight: '800' }}>
+                  📋 각 차수별 신청 접수 상황 및 정원 제어
+                </h3>
+                {selectedSchedules.size > 0 && (
+                  <button
+                    onClick={handleBulkDeleteSchedules}
+                    className="huge-btn-danger"
+                    style={{
+                      padding: '0.35rem 0.8rem',
+                      fontSize: '0.85rem',
+                      fontWeight: '800',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      color: 'white',
+                      backgroundColor: 'var(--color-danger)',
+                      boxShadow: '0 4px 10px rgba(220, 38, 38, 0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.2rem'
+                    }}
+                  >
+                    🗑️ 선택한 차수 일괄 삭제 ({selectedSchedules.size}개)
+                  </button>
+                )}
+              </div>
               
               <div className="table-container-compact" style={{ flex: 1 }}>
                 <table className="custom-table">
                   <thead>
                     <tr>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          style={{ cursor: 'pointer' }}
+                          checked={schedules.length > 0 && selectedSchedules.size === schedules.length}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setSelectedSchedules(new Set(schedules.map(s => s.date_id)));
+                            } else {
+                              setSelectedSchedules(new Set());
+                            }
+                          }}
+                        />
+                      </th>
+                      <th>지역</th>
                       <th>차수</th>
                       <th>교육 날짜</th>
                       <th>예약 현황</th>
@@ -1446,9 +1615,44 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
                     {schedules.map(sch => {
                       const regCount = sch.current_count || 0;
                       const maxCap = sch.max_capacity || 60;
+                      const dynamicTitle = getDynamicTitle(sch, schedules);
+                      const isChecked = selectedSchedules.has(sch.date_id);
+                      
                       return (
-                        <tr key={sch.date_id}>
-                          <td style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--color-primary)' }}>{sch.title}</td>
+                        <tr key={sch.date_id} style={{ backgroundColor: isChecked ? '#f1f5f9' : 'transparent' }}>
+                          <td style={{ textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              style={{ cursor: 'pointer' }}
+                              checked={isChecked}
+                              onChange={() => {
+                                const next = new Set(selectedSchedules);
+                                if (next.has(sch.date_id)) {
+                                  next.delete(sch.date_id);
+                                } else {
+                                  next.add(sch.date_id);
+                                }
+                                setSelectedSchedules(next);
+                              }}
+                            />
+                          </td>
+                          <td>
+                            <span style={{
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              fontWeight: '800',
+                              backgroundColor: sch.region === '남부' ? '#ffe4e6' :
+                                             sch.region === '서부&충청실' ? '#fef3c7' :
+                                             sch.region === '중부&강원실' ? '#dcfce7' : '#e0f2fe',
+                              color: sch.region === '남부' ? '#b91c1c' :
+                                     sch.region === '서부&충청실' ? '#d97706' :
+                                     sch.region === '중부&강원실' ? '#15803d' : '#0369a1'
+                            }}>
+                              {sch.region || '수도권'}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--color-primary)' }}>{dynamicTitle}</td>
                           <td style={{ fontWeight: '700' }}>{sch.training_date}</td>
                           <td>
                             <span style={{ fontSize: '1.05rem', fontWeight: '800', color: regCount >= maxCap ? 'var(--color-danger)' : 'var(--color-success)' }}>
@@ -1478,7 +1682,7 @@ function AdminDashboard({ user, triggerAlert, showConfirm }) {
                             <button 
                               className="huge-btn-danger"
                               style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem', border: 'none', borderRadius: '5px', cursor: 'pointer', color: 'white' }}
-                              onClick={() => handleDeleteSchedule(sch.date_id, sch.title)}
+                              onClick={() => handleDeleteSchedule(sch.date_id, dynamicTitle)}
                             >
                               삭제
                             </button>
