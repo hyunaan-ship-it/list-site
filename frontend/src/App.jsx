@@ -963,10 +963,10 @@ function LeaderPortal({ user, triggerAlert, showConfirm }) {
                               statusColor = 'var(--color-success)';
                               statusBg = '#dcfce7';
                               statusLabel = '✅ 검증성공';
-                            } else if (row.status === 'INVALID') {
+                            } else if (row.status === 'INVALID' || row.status === 'ERROR') {
                               statusColor = 'var(--color-danger)';
                               statusBg = '#fee2e2';
-                              statusLabel = '❌ 없는사번';
+                              statusLabel = '❌ 미등록사번';
                             } else if (row.status === 'DUPLICATE') {
                               statusColor = '#ea580c';
                               statusBg = '#ffedd5';
