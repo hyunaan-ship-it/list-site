@@ -15,9 +15,17 @@ app.set('trust proxy', 1);
 
 // Connect to Database
 // Connect to Postgres
+const NEON_DB_URL = 'postgresql://neondb_owner:npg_YAWdCVa3Q8eq@ep-solitary-cloud-ao1owvcs-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+
+const connectionString = process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== ''
+  ? process.env.DATABASE_URL
+  : NEON_DB_URL;
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  connectionString: connectionString,
+  ssl: connectionString.includes('neon.tech') || process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false
 });
 
 const db = {
@@ -240,14 +248,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
     res.json({ message: '로그인에 성공했습니다.', user: req.session.user });
   } catch (error) {
     console.error('Login error:', error);
-    const dbUrl = process.env.DATABASE_URL || '';
-    const maskedDbUrl = dbUrl.replace(/:[^:@]+@/, ':***@');
-    res.status(500).json({ 
-      error: '서버 오류가 발생했습니다.', 
-      message: error.message, 
-      stack: error.stack,
-      dbUrl: maskedDbUrl
-    });
+    res.status(500).json({ error: '서버 오류가 발생했습니다.' });
   }
 });
 
