@@ -32,13 +32,14 @@ const db = {
   prepare: (query) => {
     let i = 1;
     const pgQuery = query.replace(/\?/g, () => `$${i++}`);
+    const flattenArgs = (args) => (args.length === 1 && Array.isArray(args[0])) ? args[0] : args;
     return {
       get: async (...args) => {
-        const res = await pool.query(pgQuery, args);
+        const res = await pool.query(pgQuery, flattenArgs(args));
         return res.rows[0];
       },
       all: async (...args) => {
-        const res = await pool.query(pgQuery, args);
+        const res = await pool.query(pgQuery, flattenArgs(args));
         return res.rows;
       },
       run: async (...args) => {
@@ -46,7 +47,7 @@ const db = {
         if (/^\s*INSERT\s/i.test(finalQuery)) {
           finalQuery += ' RETURNING *';
         }
-        const res = await pool.query(finalQuery, args);
+        const res = await pool.query(finalQuery, flattenArgs(args));
         const firstRow = res.rows[0];
         const lastId = firstRow ? (firstRow.reg_id || firstRow.date_id || firstRow.id) : null;
         return { lastInsertRowid: lastId, changes: res.rowCount };
