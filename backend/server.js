@@ -23,7 +23,7 @@ const pool = new Pool({
 const db = {
   prepare: (query) => {
     let i = 1;
-    const pgQuery = query.replace(/\?/g, () => `${i++}`);
+    const pgQuery = query.replace(/\?/g, () => `$${i++}`);
     return {
       get: async (...args) => {
         const res = await pool.query(pgQuery, args);
@@ -84,7 +84,7 @@ try {
   const adminEmpId = 'admin';
   const ADMIN_DEFAULT_PASSWORD = 'lgadmin';
 
-  const adminEmpExists = await db.prepare('SELECT COUNT(*) as count FROM employees WHERE emp_id = ?').get(adminEmpId).then(r => r.count);
+  const adminEmpExists = await db.prepare('SELECT COUNT(*) as count FROM employees WHERE emp_id = ?').get(adminEmpId).then(r => Number(r.count));
   if (adminEmpExists === 0) {
     await db.prepare(`
       INSERT INTO employees (emp_id, name, gender, position, department, email, phone)
@@ -350,6 +350,7 @@ app.get('/api/v1/schedule', requireAuth, async (req, res) => {
       FROM training_dates t
       ORDER BY t.training_date ASC
     `).all();
+    schedules.forEach(s => s.current_count = Number(s.current_count));
     res.json(schedules);
   } catch (error) {
     console.error('Schedule fetch error:', error);
@@ -555,8 +556,9 @@ app.post('/api/v1/registration/bulk-update', requireAuth, async (req, res) => {
             return res.status(404).json({ error: '선택하신 교육 차수 일정이 존재하지 않습니다.' });
           }
           const maxCap = session.max_capacity || 60;
-          if (session.current_count + delta > maxCap) {
-            return res.status(400).json({ error: `[정원 초과] ${session.title}는 정원(${maxCap}명)을 초과하여 변경할 수 없습니다. (현재: ${session.current_count}명, 추가하려는 수: ${delta}명)` });
+          const currCount = Number(session.current_count);
+          if (currCount + delta > maxCap) {
+            return res.status(400).json({ error: `[정원 초과] ${session.title}는 정원(${maxCap}명)을 초과하여 변경할 수 없습니다. (현재: ${currCount}명, 추가하려는 수: ${delta}명)` });
           }
         }
       }
@@ -603,7 +605,7 @@ app.post('/api/v1/registration/bulk', requireAuth, async (req, res) => {
     }
 
     const maxCapacity = targetSession.max_capacity || 60;
-    const currentCount = targetSession.current_count;
+    const currentCount = Number(targetSession.current_count);
     const remainingSpots = maxCapacity - currentCount;
 
     // Admin bypasses capacity check!
@@ -693,7 +695,7 @@ app.post('/api/v1/registration', requireAuth, async (req, res) => {
     
     const maxCapacity = targetDate.max_capacity || 60;
     // Admin bypasses capacity check!
-    if (!isAdmin && targetDate.current_count >= maxCapacity) {
+    if (!isAdmin && Number(targetDate.current_count) >= maxCapacity) {
       return res.status(400).json({ error: `정원 초과! 한 차수에는 최대 ${maxCapacity}명까지만 등록할 수 있습니다.` });
     }
 
@@ -742,7 +744,7 @@ app.put('/api/v1/registration/:reg_id', requireAuth, async (req, res) => {
       }
       const maxCap = targetSession.max_capacity || 60;
       // Admin bypasses capacity check!
-      if (!isAdmin && targetSession.current_count >= maxCap) {
+      if (!isAdmin && Number(targetSession.current_count) >= maxCap) {
         return res.status(400).json({ error: `[이동 불가] 변경하려는 ${targetSession.title}는 이미 정원(${maxCap}명)이 마감되었습니다.` });
       }
     }

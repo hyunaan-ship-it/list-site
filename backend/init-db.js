@@ -31,7 +31,7 @@ await pool.query(`
   );
 
   CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY SERIAL,
+    user_id SERIAL PRIMARY KEY,
     emp_id TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT CHECK(role IN ('ADMIN', 'LEADER')) DEFAULT 'LEADER',
@@ -40,7 +40,7 @@ await pool.query(`
   );
 
   CREATE TABLE IF NOT EXISTS training_dates (
-    date_id INTEGER PRIMARY KEY SERIAL,
+    date_id SERIAL PRIMARY KEY,
     training_date TEXT NOT NULL UNIQUE, -- YYYY-MM-DD
     title TEXT NOT NULL,                -- e.g. "1차수 (11.04)"
     max_capacity INTEGER DEFAULT 60,    -- STRICT 60 CAPACITY
@@ -49,7 +49,7 @@ await pool.query(`
   );
 
   CREATE TABLE IF NOT EXISTS registrations (
-    reg_id INTEGER PRIMARY KEY SERIAL,
+    reg_id SERIAL PRIMARY KEY,
     date_id INTEGER NOT NULL,
     emp_id TEXT NOT NULL,
     leader_emp_id TEXT NOT NULL,
