@@ -415,8 +415,9 @@ app.post('/api/v1/schedule', requireAdmin, async (req, res) => {
     res.status(201).json(newSchedule);
   } catch (error) {
     console.error('Schedule create error:', error);
-    if (error.message.includes('UNIQUE')) {
-      return res.status(400).json({ error: '해당 날짜에 이미 등록된 교육 일정이 있습니다.' });
+    const msg = error.message ? error.message.toLowerCase() : '';
+    if (error.code === '23505' || msg.includes('unique') || msg.includes('duplicate')) {
+      return res.status(400).json({ error: '해당 지역 및 날짜에 이미 등록된 교육 일정이 있습니다.' });
     }
     res.status(500).json({ error: '서버 오류가 발생했습니다.' });
   }

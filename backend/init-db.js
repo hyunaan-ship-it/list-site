@@ -41,11 +41,13 @@ await pool.query(`
 
   CREATE TABLE IF NOT EXISTS training_dates (
     date_id SERIAL PRIMARY KEY,
-    training_date TEXT NOT NULL UNIQUE, -- YYYY-MM-DD
+    training_date TEXT NOT NULL,        -- YYYY-MM-DD
     title TEXT NOT NULL,                -- e.g. "1차수 (11.04)"
     max_capacity INTEGER DEFAULT 60,    -- STRICT 60 CAPACITY
     status TEXT CHECK(status IN ('ACTIVE', 'CLOSED')) DEFAULT 'ACTIVE',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    region TEXT DEFAULT '수도권',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(training_date, region)
   );
 
   CREATE TABLE IF NOT EXISTS registrations (
@@ -112,7 +114,7 @@ const empCountRes = await pool.query('SELECT COUNT(*) as count FROM employees');
 const empCount = parseInt(empCountRes.rows[0].count);
 
 if (empCount === 0) {
-  const excelPath = path.join(__dirname, '..', '26년_1월 인사정보.xlsx');
+  const excelPath = path.join(__dirname, '..', '인사정보_0528.xlsx');
   if (fs.existsSync(excelPath)) {
     console.log('Loading Excel data from:', excelPath);
     console.log('Reading Excel file... (this may take a few seconds due to file size)');
