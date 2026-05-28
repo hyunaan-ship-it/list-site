@@ -240,7 +240,14 @@ app.post('/api/v1/auth/login', async (req, res) => {
     res.json({ message: '로그인에 성공했습니다.', user: req.session.user });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: '서버 오류가 발생했습니다.', message: error.message, stack: error.stack });
+    const dbUrl = process.env.DATABASE_URL || '';
+    const maskedDbUrl = dbUrl.replace(/:[^:@]+@/, ':***@');
+    res.status(500).json({ 
+      error: '서버 오류가 발생했습니다.', 
+      message: error.message, 
+      stack: error.stack,
+      dbUrl: maskedDbUrl
+    });
   }
 });
 
