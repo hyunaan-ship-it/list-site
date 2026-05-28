@@ -14,3 +14,5 @@ services:
         value: production
       - key: FRONTEND_URL
         value: https://hyunaan-ship-it.github.io
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_YAWdCVa3Q8eq@ep-solitary-cloud-ao1owvcs-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
